@@ -40,20 +40,7 @@
                 "attached": {
                     "attachmentName": "codefile",
                     "attachmentType": "text/plain"
-                },
-                "stemCells": [
-                    {
-                        "initialCount": 2,
-                        "memory": "256 MB",
-                        "reactive": {
-                            "minCount": 1,
-                            "maxCount": 4,
-                            "ttl": "2 minutes",
-                            "threshold": 1,
-                            "increment": 1
-                        }
-                    }
-                ]
+                }
             }
         ],
         "python": [
@@ -178,7 +165,20 @@
                     "prefix": "openwhisk",
                     "name": "action-golang-v1.20",
                     "tag": "nightly"
-                }
+                },
+		        "stemCells": [
+                    {
+                        "initialCount": 1,
+                        "memory": "256 MB",
+                        "reactive": {
+                            "minCount": 1,
+                            "maxCount": 1,
+                            "ttl": "2 minutes",
+                            "threshold": 1,
+                            "increment": 1
+                        }
+                    }
+                ]
             }
         ],
         "dotnet": [
