@@ -80,6 +80,7 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
 
   // Key is ColdStartKey, value is the number of cold Start in minute
   var coldStartCount = immutable.Map.empty[ColdStartKey, Int]
+  var activeContainers: Map[String, (ActorRef, ContainerData)] = Map()
 
   adjustPrewarmedContainer(true, false)
 
@@ -133,6 +134,7 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
         }
         val kind = r.action.exec.kind
         val memory = r.action.limits.memory.megabytes.MB
+        val actionName = r.action.name.toString
 
         val createdContainer =
           // Schedule a job to a warm container
@@ -147,7 +149,7 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
                 .orElse {
                   // Is there enough space to create a new container or do other containers have to be removed?
                   if (hasPoolSpaceFor(busyPool ++ freePool ++ prewarmedPool, prewarmStartingPool, memory)) {
-                    val container = Some(createContainer(memory), "cold")
+                    val container = Some((createContainer(memory, actionName), "cold"))
                     incrementColdStartCount(kind, memory)
                     container
                   } else None
@@ -165,15 +167,16 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
                   takePrewarmContainer(r.action)
                     .map(container => (container, "recreatedPrewarm"))
                     .getOrElse {
-                      val container = (createContainer(memory), "recreated")
+                      val container = (createContainer(memory, actionName), "recreated")
                       incrementColdStartCount(kind, memory)
                       container
                   }))
 
         createdContainer match {
-          case Some(((actor, data), containerState)) =>
+          case Some(((actor, data: ContainerData), containerState)) =>
             //increment active count before storing in pool map
             val newData = data.nextRun(r)
+            
             val container = newData.getContainer
 
             if (newData.activeActivationCount < 1) {
@@ -364,11 +367,24 @@ class ContainerPool(childFactory: ActorRefFactory => ActorRef,
   }
 
   /** Creates a new container and updates state accordingly. */
-  def createContainer(memoryLimit: ByteSize): (ActorRef, ContainerData) = {
-    val ref = childFactory(context)
-    val data = MemoryData(memoryLimit)
-    freePool = freePool + (ref -> data)
-    ref -> data
+  def createContainer(memoryLimit: ByteSize, actionName: String): (ActorRef, ContainerData) = {
+
+    // Check if a container for this action already exists
+        if (activeContainers.contains(actionName)) {
+            // Return the existing container
+            activeContainers(actionName)
+        }
+
+        else {
+          // Create a new container if none exists
+            val ref = childFactory(context)
+            val data = MemoryData(memoryLimit)
+            freePool = freePool + (ref -> data)
+            activeContainers = activeContainers + (actionName -> (ref, data))
+            ref -> data
+        }
+
+
   }
 
   /** Creates a new prewarmed container */
